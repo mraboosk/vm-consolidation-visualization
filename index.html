@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>VM Consolidation: BalCon vs PheCon</title>
+<style>
+  :root {
+    --bg: #fafaf7;
+    --surface: #ffffff;
+    --surface-2: #f1efe8;
+    --text: #1a1a1a;
+    --text-muted: #5f5e5a;
+    --text-faint: #888780;
+    --border: rgba(0, 0, 0, 0.12);
+    --border-strong: rgba(0, 0, 0, 0.22);
+    --info: #185fa5;
+    --info-bg: #e6f1fb;
+    --success: #3b6d11;
+    --success-bg: #eaf3de;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1a1a18;
+      --surface: #232321;
+      --surface-2: #2c2c2a;
+      --text: #f1efe8;
+      --text-muted: #b4b2a9;
+      --text-faint: #888780;
+      --border: rgba(255, 255, 255, 0.12);
+      --border-strong: rgba(255, 255, 255, 0.22);
+      --info: #85b7eb;
+      --info-bg: #0c447c;
+      --success: #97c459;
+      --success-bg: #27500a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.6;
+    padding: 2rem 1rem;
+  }
+  .container { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 22px; font-weight: 500; margin: 0 0 0.5rem; }
+  .lede { font-size: 14px; color: var(--text-muted); margin: 0 0 1.5rem; }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 1rem; }
+  button {
+    background: var(--surface);
+    color: var(--text);
+    border: 0.5px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    padding: 8px 14px;
+    font-size: 14px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  button:hover:not(:disabled) { background: var(--surface-2); }
+  button:active:not(:disabled) { transform: scale(0.98); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  #status {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 1rem;
+    min-height: 20px;
+  }
+  #stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px;
+    margin-bottom: 1.25rem;
+  }
+  .stat-card {
+    background: var(--surface-2);
+    border-radius: var(--radius-md);
+    padding: 0.75rem 1rem;
+  }
+  .stat-label { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+  .stat-value { font-size: 22px; font-weight: 500; }
+  #cluster {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 10px;
+  }
+  @media (max-width: 600px) {
+    #cluster { grid-template-columns: repeat(2, 1fr); }
+  }
+  .host {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 8px 10px;
+  }
+  .host.empty { border: 1px dashed var(--border-strong); opacity: 0.55; }
+  .host-head {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    font-weight: 500;
+    margin-bottom: 6px;
+  }
+  .host-head span:last-child { color: var(--text-faint); font-weight: 400; }
+  .meter-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  .meter {
+    height: 6px;
+    background: var(--surface-2);
+    border-radius: 3px;
+    overflow: hidden;
+    margin: 3px 0 6px;
+  }
+  .meter > div { height: 100%; }
+  .legend {
+    margin-top: 1rem;
+    font-size: 12px;
+    color: var(--text-faint);
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  .swatch {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    vertical-align: -1px;
+    margin-right: 4px;
+  }
+  footer {
+    margin-top: 2rem;
+    padding-top: 1rem;
+    border-top: 0.5px solid var(--border);
+    font-size: 12px;
+    color: var(--text-faint);
+  }
+  footer a { color: var(--info); }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>VM Consolidation: BalCon vs PheCon</h1>
+  <p class="lede">
+    Interactive comparison of two VM-rebalancing algorithms on a 10-host OpenStack-style
+    cluster. Generate a cluster, then run each algorithm against it.
+  </p>
+
+  <div class="controls">
+    <button id="btn-generate">Generate cluster</button>
+    <button id="btn-balcon" disabled>Run BalCon</button>
+    <button id="btn-phecon" disabled>Run PheCon</button>
+    <button id="btn-reset" disabled>Reset</button>
+  </div>
+
+  <div id="status">Click "Generate cluster" to create a random 10-host cluster.</div>
+  <div id="stats"></div>
+  <div id="cluster"></div>
+
+  <div class="legend">
+    <span><span class="swatch" style="background: var(--info-bg);"></span>CPU used</span>
+    <span><span class="swatch" style="background: var(--success-bg);"></span>RAM used</span>
+    <span><span class="swatch" style="background: var(--surface-2); border: 0.5px solid var(--border-strong);"></span>Free / empty host</span>
+  </div>
+
+  <footer>
+    <p>
+      Reference: <a href="https://doi.org/10.1016/j.future.2023.07.030">BalCon paper</a> ·
+      <a href="https://doi.org/10.1145/3673038.3673139">PheCon paper</a>
+    </p>
+    <p>
+      This is a pedagogical demo. Algorithms are approximations of the published versions
+      to illustrate behavior, not faithful reproductions for benchmarking.
+    </p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  const HOSTS = 10;
+  const HOST_CPU = 32;
+  const HOST_RAM = 64;
+  const FLAVORS = [
+    { name: 'tiny',    cpu: 1,  ram: 2  },
+    { name: 'small',   cpu: 2,  ram: 4  },
+    { name: 'medium',  cpu: 4,  ram: 8  },
+    { name: 'large',   cpu: 8,  ram: 16 },
+    { name: 'cpu-hi',  cpu: 8,  ram: 4  },
+    { name: 'ram-hi',  cpu: 2,  ram: 16 },
+    { name: 'xlarge',  cpu: 12, ram: 24 },
+  ];
+
+  let initialState = null;
+  let currentState = null;
+
+  const btnGen = document.getElementById('btn-generate');
+  const btnBal = document.getElementById('btn-balcon');
+  const btnPhe = document.getElementById('btn-phecon');
+  const btnRst = document.getElementById('btn-reset');
+  const statusEl = document.getElementById('status');
+  const statsEl = document.getElementById('stats');
+  const clusterEl = document.getElementById('cluster');
+
+  function rand(n) { return Math.floor(Math.random() * n); }
+  function deepCloneState(state) {
+    return state.map(h => ({ id: h.id, vms: h.vms.map(v => ({ ...v })) }));
+  }
+  function hostUsage(h) {
+    return h.vms.reduce((a, v) => ({ cpu: a.cpu + v.cpu, ram: a.ram + v.ram }), { cpu: 0, ram: 0 });
+  }
+  function activeHosts(state) { return state.filter(h => h.vms.length > 0).length; }
+  function totalVMs(state) { return state.reduce((a, h) => a + h.vms.length, 0); }
+  function canFit(host, vm) {
+    const u = hostUsage(host);
+    return u.cpu + vm.cpu <= HOST_CPU && u.ram + vm.ram <= HOST_RAM;
+  }
+
+  function generateCluster() {
+    const hosts = [];
+    for (let i = 0; i < HOSTS; i++) hosts.push({ id: i, vms: [] });
+    let vmId = 0, attempts = 0;
+    const targetCpu = HOSTS * HOST_CPU * 0.6;
+    let placedCpu = 0;
+    while (placedCpu < targetCpu && attempts < 2000) {
+      attempts++;
+      const flavor = FLAVORS[rand(FLAVORS.length)];
+      const h = hosts[rand(HOSTS)];
+      const used = hostUsage(h);
+      if (used.cpu + flavor.cpu <= HOST_CPU && used.ram + flavor.ram <= HOST_RAM) {
+        h.vms.push({ id: vmId++, cpu: flavor.cpu, ram: flavor.ram, flavor: flavor.name });
+        placedCpu += flavor.cpu;
+      }
+    }
+    return hosts;
+  }
+
+  function runBalCon(state) {
+    const s = deepCloneState(state);
+    let migrations = 0;
+    let progress = true;
+    while (progress) {
+      progress = false;
+      const active = s.filter(h => h.vms.length > 0);
+      if (active.length <= 1) break;
+      active.sort((a, b) => hostUsage(a).cpu - hostUsage(b).cpu);
+      const src = active[0];
+      const vmsSorted = [...src.vms].sort((a, b) => (b.cpu + b.ram) - (a.cpu + a.ram));
+      const plan = [];
+      const tempState = deepCloneState(s);
+      const tempSrc = tempState.find(h => h.id === src.id);
+      tempSrc.vms = [];
+      let allPlaced = true;
+      for (const vm of vmsSorted) {
+        const candidates = tempState.filter(h => h.id !== src.id && canFit(h, vm));
+        if (candidates.length === 0) {
+          let forced = false;
+          for (const h of tempState) {
+            if (h.id === src.id) continue;
+            const u = hostUsage(h);
+            const cpuDef = (u.cpu + vm.cpu) - HOST_CPU;
+            const ramDef = (u.ram + vm.ram) - HOST_RAM;
+            if (cpuDef > HOST_CPU || ramDef > HOST_RAM) continue;
+            const evictable = h.vms.find(ev =>
+              ev.cpu >= Math.max(0, cpuDef) && ev.ram >= Math.max(0, ramDef) &&
+              (ev.cpu + ev.ram) < (vm.cpu + vm.ram)
+            );
+            if (!evictable) continue;
+            const evictTarget = tempState.find(t =>
+              t.id !== h.id && t.id !== src.id && canFit(t, evictable)
+            );
+            if (!evictTarget) continue;
+            h.vms = h.vms.filter(x => x.id !== evictable.id);
+            evictTarget.vms.push(evictable);
+            h.vms.push(vm);
+            plan.push({ vm: vm.id, to: h.id });
+            plan.push({ vm: evictable.id, to: evictTarget.id });
+            forced = true;
+            break;
+          }
+          if (!forced) { allPlaced = false; break; }
+          continue;
+        }
+        candidates.sort((a, b) => {
+          const ua = hostUsage(a), ub = hostUsage(b);
+          return ((HOST_CPU - ua.cpu - vm.cpu) + (HOST_RAM - ua.ram - vm.ram)) -
+                 ((HOST_CPU - ub.cpu - vm.cpu) + (HOST_RAM - ub.ram - vm.ram));
+        });
+        candidates[0].vms.push(vm);
+        plan.push({ vm: vm.id, to: candidates[0].id });
+      }
+      if (allPlaced) {
+        for (let i = 0; i < s.length; i++) s[i].vms = tempState[i].vms;
+        migrations += plan.length;
+        progress = true;
+      }
+    }
+    return { state: s, migrations };
+  }
+
+  function runPheCon(state) {
+    const s = deepCloneState(state);
+    let migrations = 0;
+    let progress = true;
+    let safety = 0;
+    while (progress && safety < 200) {
+      safety++;
+      progress = false;
+      const active = s.filter(h => h.vms.length > 0);
+      if (active.length <= 1) break;
+      active.sort((a, b) => {
+        const ua = hostUsage(a), ub = hostUsage(b);
+        return (ua.cpu + ua.ram) - (ub.cpu + ub.ram);
+      });
+      for (const src of active.slice(0, 3)) {
+        const vmsSorted = [...src.vms].sort((a, b) => (a.cpu + a.ram) - (b.cpu + b.ram));
+        for (const vm of vmsSorted) {
+          const candidates = s.filter(h => h.id !== src.id && canFit(h, vm));
+          if (candidates.length > 0) {
+            candidates.sort((a, b) => {
+              const ua = hostUsage(a), ub = hostUsage(b);
+              const lA = (HOST_CPU - ua.cpu - vm.cpu) + (HOST_RAM - ua.ram - vm.ram);
+              const lB = (HOST_CPU - ub.cpu - vm.cpu) + (HOST_RAM - ub.ram - vm.ram);
+              return lA - lB;
+            });
+            src.vms = src.vms.filter(x => x.id !== vm.id);
+            candidates[0].vms.push(vm);
+            migrations++;
+            progress = true;
+            break;
+          } else {
+            let swapped = false;
+            for (const h of s) {
+              if (h.id === src.id) continue;
+              const u = hostUsage(h);
+              const cpuDef = Math.max(0, u.cpu + vm.cpu - HOST_CPU);
+              const ramDef = Math.max(0, u.ram + vm.ram - HOST_RAM);
+              if (cpuDef === 0 && ramDef === 0) continue;
+              const cand = h.vms
+                .filter(ev => ev.cpu >= cpuDef && ev.ram >= ramDef && (ev.cpu + ev.ram) < (vm.cpu + vm.ram))
+                .sort((a, b) => (a.cpu + a.ram) - (b.cpu + b.ram))[0];
+              if (!cand) continue;
+              const target = s.find(t => t.id !== h.id && t.id !== src.id && canFit(t, cand));
+              if (!target) continue;
+              h.vms = h.vms.filter(x => x.id !== cand.id);
+              target.vms.push(cand);
+              src.vms = src.vms.filter(x => x.id !== vm.id);
+              h.vms.push(vm);
+              migrations += 2;
+              progress = true;
+              swapped = true;
+              break;
+            }
+            if (swapped) break;
+          }
+        }
+        if (progress) break;
+      }
+    }
+    return { state: s, migrations };
+  }
+
+  function renderStats(extra) {
+    if (!currentState) { statsEl.innerHTML = ''; return; }
+    const active = activeHosts(currentState);
+    const empty = HOSTS - active;
+    const vms = totalVMs(currentState);
+    const totalCpu = currentState.reduce((a, h) => a + hostUsage(h).cpu, 0);
+    const totalRam = currentState.reduce((a, h) => a + hostUsage(h).ram, 0);
+    const avgFreeCpu = Math.round((HOST_CPU - totalCpu / Math.max(active, 1)) * 10) / 10;
+    const cards = [
+      { label: 'Active hosts', value: active + ' / ' + HOSTS },
+      { label: 'Empty hosts', value: empty },
+      { label: 'Total VMs', value: vms },
+      { label: 'Avg free CPU/host', value: avgFreeCpu },
+    ];
+    if (extra && extra.migrations !== undefined) {
+      cards.push({ label: 'Migrations used', value: extra.migrations });
+    }
+    statsEl.innerHTML = cards.map(c =>
+      '<div class="stat-card"><div class="stat-label">' + c.label +
+      '</div><div class="stat-value">' + c.value + '</div></div>'
+    ).join('');
+  }
+
+  function renderCluster() {
+    if (!currentState) { clusterEl.innerHTML = ''; return; }
+    clusterEl.innerHTML = currentState.map(h => {
+      const u = hostUsage(h);
+      const cpuPct = Math.round((u.cpu / HOST_CPU) * 100);
+      const ramPct = Math.round((u.ram / HOST_RAM) * 100);
+      const empty = h.vms.length === 0;
+      return (
+        '<div class="host' + (empty ? ' empty' : '') + '">' +
+          '<div class="host-head"><span>host ' + h.id + '</span>' +
+            '<span>' + h.vms.length + ' vm' + (h.vms.length === 1 ? '' : 's') + '</span></div>' +
+          '<div class="meter-row"><span>cpu</span><span>' + u.cpu + '/' + HOST_CPU + '</span></div>' +
+          '<div class="meter"><div style="width:' + cpuPct + '%; background: var(--info-bg);"></div></div>' +
+          '<div class="meter-row"><span>ram</span><span>' + u.ram + '/' + HOST_RAM + '</span></div>' +
+          '<div class="meter"><div style="width:' + ramPct + '%; background: var(--success-bg);"></div></div>' +
+        '</div>'
+      );
+    }).join('');
+  }
+
+  function setStatus(text) { statusEl.textContent = text; }
+
+  btnGen.addEventListener('click', () => {
+    initialState = generateCluster();
+    currentState = deepCloneState(initialState);
+    btnBal.disabled = false;
+    btnPhe.disabled = false;
+    btnRst.disabled = false;
+    setStatus('Generated cluster with ' + totalVMs(currentState) +
+      ' VMs across ' + activeHosts(currentState) + ' active hosts. Now try an algorithm.');
+    renderStats();
+    renderCluster();
+  });
+
+  btnBal.addEventListener('click', () => {
+    if (!initialState) return;
+    currentState = deepCloneState(initialState);
+    const result = runBalCon(currentState);
+    currentState = result.state;
+    setStatus('BalCon: consolidated to ' + activeHosts(currentState) +
+      ' active hosts using ' + result.migrations + ' migrations.');
+    renderStats({ migrations: result.migrations });
+    renderCluster();
+  });
+
+  btnPhe.addEventListener('click', () => {
+    if (!initialState) return;
+    currentState = deepCloneState(initialState);
+    const result = runPheCon(currentState);
+    currentState = result.state;
+    setStatus('PheCon: consolidated to ' + activeHosts(currentState) +
+      ' active hosts using ' + result.migrations + ' migrations.');
+    renderStats({ migrations: result.migrations });
+    renderCluster();
+  });
+
+  btnRst.addEventListener('click', () => {
+    if (!initialState) return;
+    currentState = deepCloneState(initialState);
+    setStatus('Reset to the original generated cluster (same VMs, same placement).');
+    renderStats();
+    renderCluster();
+  });
+})();
+</script>
+</body>
+</html>
