@@ -1,458 +1,1332 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>VM Consolidation: BalCon vs PheCon</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cluster Consolidation — BalCon vs PheCon</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #fafaf7;
-    --surface: #ffffff;
-    --surface-2: #f1efe8;
-    --text: #1a1a1a;
-    --text-muted: #5f5e5a;
-    --text-faint: #888780;
-    --border: rgba(0, 0, 0, 0.12);
-    --border-strong: rgba(0, 0, 0, 0.22);
-    --info: #185fa5;
-    --info-bg: #e6f1fb;
-    --success: #3b6d11;
-    --success-bg: #eaf3de;
-    --radius-md: 8px;
-    --radius-lg: 12px;
+    --bg:        oklch(0.985 0.004 240);
+    --panel:     oklch(1    0     0);
+    --ink:       oklch(0.22 0.012 250);
+    --ink-2:     oklch(0.45 0.012 250);
+    --ink-3:     oklch(0.62 0.010 250);
+    --line:      oklch(0.91 0.006 250);
+    --line-2:    oklch(0.95 0.006 250);
+    --rail:      oklch(0.965 0.005 250);
+
+    --balcon:    oklch(0.55 0.15 245);
+    --balcon-2:  oklch(0.92 0.04 245);
+    --phecon:    oklch(0.62 0.16 35);
+    --phecon-2:  oklch(0.94 0.05 60);
+    --custom:    oklch(0.55 0.16 300);
+    --custom-2:  oklch(0.93 0.05 300);
+
+    --ok:        oklch(0.65 0.14 155);
+    --warn:      oklch(0.72 0.16 70);
+    --danger:    oklch(0.60 0.18 25);
+
+    --shadow: 0 1px 0 oklch(0.9 0.005 250 / 0.6), 0 6px 24px -12px oklch(0.2 0.02 250 / 0.18);
+
+    --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    --sans: 'IBM Plex Sans', system-ui, sans-serif;
   }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #1a1a18;
-      --surface: #232321;
-      --surface-2: #2c2c2a;
-      --text: #f1efe8;
-      --text-muted: #b4b2a9;
-      --text-faint: #888780;
-      --border: rgba(255, 255, 255, 0.12);
-      --border-strong: rgba(255, 255, 255, 0.22);
-      --info: #85b7eb;
-      --info-bg: #0c447c;
-      --success: #97c459;
-      --success-bg: #27500a;
-    }
-  }
+
   * { box-sizing: border-box; }
-  body {
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); font-family: var(--sans); -webkit-font-smoothing: antialiased; }
+  body { min-height: 100vh; }
+
+  .app {
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: 28px 32px 64px;
+  }
+
+  /* Header */
+  .header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 24px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 22px;
+  }
+  .title-block .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin-bottom: 6px;
+  }
+  .title-block h1 {
+    font-size: 26px;
+    font-weight: 600;
     margin: 0;
-    background: var(--bg);
-    color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    line-height: 1.6;
-    padding: 2rem 1rem;
+    letter-spacing: -0.01em;
   }
-  .container { max-width: 760px; margin: 0 auto; }
-  h1 { font-size: 22px; font-weight: 500; margin: 0 0 0.5rem; }
-  .lede { font-size: 14px; color: var(--text-muted); margin: 0 0 1.5rem; }
-  .controls { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 1rem; }
-  button {
-    background: var(--surface);
-    color: var(--text);
-    border: 0.5px solid var(--border-strong);
-    border-radius: var(--radius-md);
-    padding: 8px 14px;
-    font-size: 14px;
-    font-family: inherit;
-    cursor: pointer;
-    transition: background 0.15s;
+  .title-block h1 .vs {
+    color: var(--ink-3);
+    font-weight: 400;
+    margin: 0 6px;
   }
-  button:hover:not(:disabled) { background: var(--surface-2); }
-  button:active:not(:disabled) { transform: scale(0.98); }
-  button:disabled { opacity: 0.4; cursor: not-allowed; }
-  #status {
+  .title-block h1 .tag-bal { color: var(--balcon); }
+  .title-block h1 .tag-phe { color: var(--phecon); }
+  .title-block h1 .tail {
+    color: var(--ink-3);
+    font-weight: 400;
+    font-size: 18px;
+    margin-left: 10px;
+  }
+  .title-block .sub {
     font-size: 13px;
-    color: var(--text-muted);
-    margin-bottom: 1rem;
-    min-height: 20px;
+    color: var(--ink-2);
+    margin-top: 6px;
+    max-width: 720px;
   }
-  #stats {
+
+  .seed-pill {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-2);
+    background: var(--rail);
+    border: 1px solid var(--line);
+    padding: 6px 10px;
+    border-radius: 6px;
+    white-space: nowrap;
+  }
+  .seed-pill b { color: var(--ink); font-weight: 600; }
+  .seed-pill .sub { color: var(--ink-3); }
+
+  /* Controls */
+  .controls {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: 10px;
-    margin-bottom: 1.25rem;
+    grid-template-columns: 1fr auto;
+    gap: 18px;
+    align-items: center;
+    padding: 14px 16px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+    margin-bottom: 20px;
   }
-  .stat-card {
-    background: var(--surface-2);
-    border-radius: var(--radius-md);
-    padding: 0.75rem 1rem;
+  .controls .controls-stack { display: flex; flex-direction: column; gap: 12px; }
+  .controls .btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .controls .legend { display: flex; gap: 18px; align-items: center; }
+
+  .config-row {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    flex-wrap: wrap;
   }
-  .stat-label { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
-  .stat-value { font-size: 22px; font-weight: 500; }
-  #cluster {
+  .config-field {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .config-field input {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink);
+    background: var(--rail);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 4px 6px;
+    width: 64px;
+    text-align: right;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .config-field input:focus {
+    outline: none;
+    border-color: var(--balcon);
+    box-shadow: 0 0 0 2px var(--balcon-2);
+  }
+  .config-note {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--ink-3);
+    letter-spacing: 0.04em;
+  }
+  .seg-group {
+    display: inline-flex;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .seg {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    text-transform: none;
+    padding: 4px 9px;
+    background: var(--rail);
+    color: var(--ink-3);
+    border: none;
+    cursor: pointer;
+    transition: background .12s, color .12s;
+  }
+  .seg + .seg { border-left: 1px solid var(--line); }
+  .seg:hover:not(.active) { background: var(--line-2); }
+  .seg.active { background: var(--ink); color: var(--bg); }
+
+  .types-row { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 12px; }
+  .types-head { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+  .type-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: var(--rail);
+    color: var(--ink-3);
+    cursor: pointer;
+    transition: opacity .12s, border-color .12s, color .12s;
+  }
+  .chip .swatch { width: 8px; height: 8px; border-radius: 2px; flex: none; background: var(--chip-c); }
+  .chip.on { color: var(--ink); border-color: var(--chip-c); }
+  .chip:not(.on) { opacity: 0.4; text-decoration: line-through; }
+  .chip:hover { opacity: 0.85; }
+  .chip.on:hover { opacity: 1; }
+
+  button.btn {
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 500;
+    padding: 9px 14px;
+    border-radius: 7px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    color: var(--ink);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: background .12s, border-color .12s, transform .06s;
+  }
+  button.btn:hover:not(:disabled) { background: var(--rail); }
+  button.btn:active:not(:disabled) { transform: translateY(1px); }
+  button.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  button.btn .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-3); }
+  button.btn.primary {
+    background: var(--ink);
+    color: var(--bg);
+    border-color: var(--ink);
+  }
+  button.btn.primary:hover:not(:disabled) { background: oklch(0.32 0.012 250); }
+  button.btn.bal { border-color: var(--balcon); color: var(--balcon); }
+  button.btn.bal .dot { background: var(--balcon); }
+  button.btn.bal:hover:not(:disabled) { background: var(--balcon-2); }
+  button.btn.bal.active { background: var(--balcon); color: white; }
+  button.btn.bal.active .dot { background: white; }
+  button.btn.phe { border-color: var(--phecon); color: var(--phecon); }
+  button.btn.phe .dot { background: var(--phecon); }
+  button.btn.phe:hover:not(:disabled) { background: var(--phecon-2); }
+  button.btn.phe.active { background: var(--phecon); color: white; }
+  button.btn.phe.active .dot { background: white; }
+  button.btn.cus { border-color: var(--custom); color: var(--custom); }
+  button.btn.cus .dot { background: var(--custom); }
+  button.btn.cus:hover:not(:disabled) { background: var(--custom-2); }
+  button.btn.cus.active { background: var(--custom); color: white; }
+  button.btn.cus.active .dot { background: white; }
+  button.btn.ghost { background: transparent; border-style: dashed; color: var(--ink-2); }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-2);
+  }
+  .legend-item .sw { width: 12px; height: 12px; border-radius: 3px; }
+
+  /* Stats bar */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 22px;
+  }
+  .stat {
+    background: var(--panel);
+    padding: 14px 16px;
+  }
+  .stat .label {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .stat .value {
+    font-family: var(--mono);
+    font-size: 26px;
+    font-weight: 500;
+    color: var(--ink);
+    margin-top: 4px;
+    line-height: 1.05;
+    letter-spacing: -0.01em;
+  }
+  .stat .value .unit { font-size: 13px; color: var(--ink-3); margin-left: 4px; }
+  .stat .delta {
+    font-family: var(--mono);
+    font-size: 11px;
+    margin-top: 2px;
+    color: var(--ink-3);
+  }
+  .stat .delta.up { color: var(--ok); }
+  .stat .delta.down { color: var(--danger); }
+  .stat.bal .label::before, .stat.phe .label::before, .stat.cus .label::before {
+    content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+    margin-right: 6px; vertical-align: middle;
+  }
+  .stat.bal .label::before { background: var(--balcon); }
+  .stat.phe .label::before { background: var(--phecon); }
+  .stat.cus .label::before { background: var(--custom); }
+
+  /* Cluster grid */
+  .grid-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin: 0 4px 10px;
+  }
+  .grid-label .title {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .grid-label .meta {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-3);
+  }
+
+  .cluster {
     display: grid;
     grid-template-columns: repeat(5, 1fr);
-    gap: 10px;
+    gap: 14px;
   }
-  @media (max-width: 600px) {
-    #cluster { grid-template-columns: repeat(2, 1fr); }
-  }
+
   .host {
-    background: var(--surface);
-    border: 0.5px solid var(--border);
-    border-radius: var(--radius-md);
-    padding: 8px 10px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px;
+    min-height: 200px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    box-shadow: var(--shadow);
+    position: relative;
+    transition: border-color .25s, background .25s, opacity .25s;
   }
-  .host.empty { border: 1px dashed var(--border-strong); opacity: 0.55; }
+  .host.empty {
+    background: repeating-linear-gradient(
+      45deg,
+      var(--rail),
+      var(--rail) 6px,
+      var(--panel) 6px,
+      var(--panel) 12px
+    );
+    border-style: dashed;
+    border-color: var(--line);
+  }
+  .host.empty .servers, .host.empty .meters { opacity: 0.0; }
+  .host.empty.has-ghosts .servers { opacity: 1; }
+  .host.empty .empty-tag {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 4px;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ok);
+  }
+  .host.empty .empty-tag .big { font-size: 13px; font-weight: 600; }
+  .host.overflow { border-color: var(--danger); background: oklch(0.98 0.02 25); }
+
   .host-head {
     display: flex;
     justify-content: space-between;
-    font-size: 12px;
-    font-weight: 500;
-    margin-bottom: 6px;
+    align-items: center;
   }
-  .host-head span:last-child { color: var(--text-faint); font-weight: 400; }
-  .meter-row {
+  .host-name {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink);
+    letter-spacing: 0.02em;
+  }
+  .host-name .idx {
+    color: var(--ink-3);
+    margin-right: 6px;
+    font-weight: 400;
+  }
+  .host-status {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    display: flex; align-items: center; gap: 5px;
+  }
+  .host-status .led {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--ink-3);
+  }
+  .host-status.on .led { background: var(--ok); box-shadow: 0 0 6px var(--ok); }
+  .host-status.off .led { background: oklch(0.85 0.005 250); }
+
+  .meters {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--ink-2);
+  }
+  .meter .head { display: flex; justify-content: space-between; margin-bottom: 3px; }
+  .meter .head .lbl { color: var(--ink-3); letter-spacing: 0.08em; text-transform: uppercase; }
+  .meter .head .val { color: var(--ink); }
+  .meter .bar {
+    height: 4px; background: var(--rail); border-radius: 2px; overflow: hidden;
+    position: relative;
+  }
+  .meter .bar .fill {
+    height: 100%;
+    background: var(--ink-2);
+    border-radius: 2px;
+    transition: width .35s cubic-bezier(.4,0,.2,1), background .25s;
+  }
+  .meter .bar .fill.hot { background: var(--danger); }
+  .meter .bar .fill.warm { background: var(--warn); }
+
+  .servers {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-height: 40px;
+    padding: 6px;
+    background: var(--rail);
+    border-radius: 6px;
+  }
+  .server {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 8px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--ink);
+    transition: opacity .25s, transform .35s cubic-bezier(.4,0,.2,1), background .25s, border-color .25s;
+    position: relative;
+  }
+  .server .name { display: flex; align-items: center; gap: 6px; }
+  .server .swatch { width: 8px; height: 8px; border-radius: 2px; }
+  .server .demand { color: var(--ink-3); font-size: 10px; }
+  .server.migrating-out { opacity: 0.25; }
+  .server.migrating-in { animation: flash-in .55s ease-out; }
+  .server.bal-mig { border-color: var(--balcon); background: var(--balcon-2); }
+  .server.phe-mig { border-color: var(--phecon); background: var(--phecon-2); }
+  .server.cus-mig { border-color: var(--custom); background: var(--custom-2); }
+  .server.ghost {
+    opacity: 0.32;
+    background: transparent;
+    border-style: dashed;
+    text-decoration: line-through;
+  }
+  .server.ghost .demand { text-decoration: line-through; }
+  .server.ghost.ghost-active { opacity: 1; border-style: solid; animation: flash-in .55s ease-out; }
+  .server.ghost.ghost-active.bal-mig { border-color: var(--balcon); background: var(--balcon-2); }
+  .server.ghost.ghost-active.phe-mig { border-color: var(--phecon); background: var(--phecon-2); }
+  .server.ghost.ghost-active.cus-mig { border-color: var(--custom); background: var(--custom-2); }
+  @keyframes flash-in {
+    0%   { transform: translateY(-6px); opacity: 0; }
+    40%  { opacity: 1; }
+    100% { transform: translateY(0); opacity: 1; }
+  }
+
+  /* Log panel */
+  .log-section { margin-top: 26px; }
+  .log {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 16px;
+    box-shadow: var(--shadow);
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--ink-2);
+    line-height: 1.65;
+    max-height: 220px;
+    overflow-y: auto;
+  }
+  .log .entry { display: grid; grid-template-columns: 50px 70px 1fr; gap: 10px; }
+  .log .entry .t { color: var(--ink-3); }
+  .log .entry .tag {
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+  .log .entry.bal .tag { color: var(--balcon); }
+  .log .entry.phe .tag { color: var(--phecon); }
+  .log .entry.cus .tag { color: var(--custom); }
+  .log .entry.sys .tag { color: var(--ink-3); }
+  .log .entry .msg { color: var(--ink); }
+  .log .empty {
+    color: var(--ink-3);
+    font-style: italic;
+  }
+
+  .tip-footer {
+    margin-top: 18px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-3);
     display: flex;
     justify-content: space-between;
-    font-size: 11px;
-    color: var(--text-muted);
-  }
-  .meter {
-    height: 6px;
-    background: var(--surface-2);
-    border-radius: 3px;
-    overflow: hidden;
-    margin: 3px 0 6px;
-  }
-  .meter > div { height: 100%; }
-  .legend {
-    margin-top: 1rem;
-    font-size: 12px;
-    color: var(--text-faint);
-    display: flex;
-    gap: 14px;
     flex-wrap: wrap;
+    gap: 12px;
   }
-  .swatch {
-    display: inline-block;
-    width: 10px;
-    height: 10px;
-    border-radius: 2px;
-    vertical-align: -1px;
-    margin-right: 4px;
+  .tip-footer .em { color: var(--ink-2); }
+  .kbd {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 1px 5px;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    background: var(--rail);
+    color: var(--ink-2);
   }
-  footer {
-    margin-top: 2rem;
-    padding-top: 1rem;
-    border-top: 0.5px solid var(--border);
-    font-size: 12px;
-    color: var(--text-faint);
+
+  @media (max-width: 1200px) {
+    .cluster { grid-template-columns: repeat(4, 1fr); }
+    .stats { grid-template-columns: repeat(3, 1fr); }
   }
-  footer a { color: var(--info); }
+  @media (max-width: 900px) {
+    .cluster { grid-template-columns: repeat(2, 1fr); }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .header { flex-direction: column; align-items: flex-start; }
+  }
 </style>
 </head>
 <body>
-<div class="container">
-  <h1>VM Consolidation: BalCon vs PheCon</h1>
-  <p class="lede">
-    Interactive comparison of two VM-rebalancing algorithms on a 10-host OpenStack-style
-    cluster. Generate a cluster, then run each algorithm against it.
-  </p>
+  <div class="app">
+    <div class="header">
+      <div class="title-block">
+        <div class="eyebrow">Cluster Consolidation · Comparison Tool</div>
+        <h1>
+          <span class="tag-bal">BalCon</span><span class="vs">vs</span><span class="tag-phe">PheCon</span><span class="tail">— rebalancing for free hosts</span>
+        </h1>
+        <div class="sub">
+          Generate a cluster of 10 hosts with mixed server workloads, then watch each algorithm migrate VMs to free up hosts for power-down. Reset returns to the same generated cluster so you can A/B both algorithms on identical inputs.
+        </div>
+      </div>
+      <div class="seed-pill" id="seed-pill">
+        seed · <b>—</b><br/>
+        <span class="sub">0 servers</span>
+      </div>
+    </div>
 
-  <div class="controls">
-    <button id="btn-generate">Generate cluster</button>
-    <button id="btn-balcon" disabled>Run BalCon</button>
-    <button id="btn-phecon" disabled>Run PheCon</button>
-    <button id="btn-reset" disabled>Reset</button>
+    <div class="controls">
+      <div class="controls-stack">
+        <div class="config-row">
+          <label class="config-field">hosts <input id="in-hosts" type="number" min="1" step="1" value="10"></label>
+          <span class="config-field">workload
+            <span class="seg-group" id="mode-toggle">
+              <button type="button" class="seg active" data-mode="count">count</button>
+              <button type="button" class="seg" data-mode="pct">load %</button>
+            </span>
+          </span>
+          <label class="config-field" id="field-count">servers <input id="in-servers" type="number" min="0" step="1" value="27"></label>
+          <label class="config-field" id="field-pct" style="display:none">target <input id="in-percent" type="number" min="1" max="100" step="5" value="70">%</label>
+          <span class="config-field">playback
+            <span class="seg-group" id="play-toggle">
+              <button type="button" class="seg active" data-play="auto">auto</button>
+              <button type="button" class="seg" data-play="step">step</button>
+            </span>
+          </span>
+          <span class="config-note">applied on next Generate</span>
+        </div>
+        <div class="btn-row">
+          <button class="btn primary" id="btn-generate"><span>＋ Generate new cluster</span></button>
+          <button class="btn bal" id="btn-balcon" disabled><span class="dot"></span> Run BalCon</button>
+          <button class="btn phe" id="btn-phecon" disabled><span class="dot"></span> Run PheCon</button>
+          <button class="btn cus" id="btn-custom" disabled><span class="dot"></span> Run Custom</button>
+          <button class="btn ghost" id="btn-next" disabled>Next step ▶</button>
+          <button class="btn ghost" id="btn-reset" disabled>↺ Reset to baseline</button>
+        </div>
+        <div class="types-row">
+          <div class="types-head">
+            <span class="config-field">instance types <span class="config-note" id="types-count"></span></span>
+            <span class="seg-group">
+              <button type="button" class="seg" id="types-all">all</button>
+              <button type="button" class="seg" id="types-none">none</button>
+            </span>
+          </div>
+          <div class="type-chips" id="type-chips"></div>
+        </div>
+      </div>
+      <div class="legend">
+        <div class="legend-item">
+          <span class="sw" style="background: var(--rail); border: 1px solid var(--line);"></span>
+          capacity ≤80%
+        </div>
+        <div class="legend-item">
+          <span class="sw" style="background: var(--warn);"></span>
+          80–95%
+        </div>
+        <div class="legend-item">
+          <span class="sw" style="background: var(--danger);"></span>
+          ≥95%
+        </div>
+      </div>
+    </div>
+
+    <div class="stats" id="stats"></div>
+
+    <div class="grid-label">
+      <span class="title">cluster topology</span>
+      <span class="meta" id="grid-meta">booting…</span>
+    </div>
+
+    <div class="cluster" id="cluster"></div>
+
+    <div class="log-section">
+      <div class="grid-label">
+        <span class="title">migration log</span>
+        <span class="meta" id="log-meta">0 events · scrollable</span>
+      </div>
+      <div class="log" id="log"><div class="empty">No events yet.</div></div>
+    </div>
+
+    <div class="tip-footer">
+      <span>each VM shown as <span class="em">&lt;type&gt;-NN · cpu·ram</span>. host capacity 100c / 200g.</span>
+      <span>tip: run one algo, then <span class="kbd">Reset</span>, then run the other for a clean A/B.</span>
+    </div>
   </div>
 
-  <div id="status">Click "Generate cluster" to create a random 10-host cluster.</div>
-  <div id="stats"></div>
-  <div id="cluster"></div>
-
-  <div class="legend">
-    <span><span class="swatch" style="background: var(--info-bg);"></span>CPU used</span>
-    <span><span class="swatch" style="background: var(--success-bg);"></span>RAM used</span>
-    <span><span class="swatch" style="background: var(--surface-2); border: 0.5px solid var(--border-strong);"></span>Free / empty host</span>
-  </div>
-
-  <footer>
-    <p>
-      Reference: <a href="https://doi.org/10.1016/j.future.2023.07.030">BalCon paper</a> ·
-      <a href="https://doi.org/10.1145/3673038.3673139">PheCon paper</a>
-    </p>
-    <p>
-      This is a pedagogical demo. Algorithms are approximations of the published versions
-      to illustrate behavior, not faithful reproductions for benchmarking.
-    </p>
-  </footer>
-</div>
-
+<script src="constants.js"></script>
 <script>
 (function () {
-  const HOSTS = 10;
-  const HOST_CPU = 32;
-  const HOST_RAM = 64;
-  const FLAVORS = [
-    { name: 'tiny',    cpu: 1,  ram: 2  },
-    { name: 'small',   cpu: 2,  ram: 4  },
-    { name: 'medium',  cpu: 4,  ram: 8  },
-    { name: 'large',   cpu: 8,  ram: 16 },
-    { name: 'cpu-hi',  cpu: 8,  ram: 4  },
-    { name: 'ram-hi',  cpu: 2,  ram: 16 },
-    { name: 'xlarge',  cpu: 12, ram: 24 },
-  ];
-
-  let initialState = null;
-  let currentState = null;
-
-  const btnGen = document.getElementById('btn-generate');
-  const btnBal = document.getElementById('btn-balcon');
-  const btnPhe = document.getElementById('btn-phecon');
-  const btnRst = document.getElementById('btn-reset');
-  const statusEl = document.getElementById('status');
-  const statsEl = document.getElementById('stats');
-  const clusterEl = document.getElementById('cluster');
-
-  function rand(n) { return Math.floor(Math.random() * n); }
-  function deepCloneState(state) {
-    return state.map(h => ({ id: h.id, vms: h.vms.map(v => ({ ...v })) }));
-  }
-  function hostUsage(h) {
-    return h.vms.reduce((a, v) => ({ cpu: a.cpu + v.cpu, ram: a.ram + v.ram }), { cpu: 0, ram: 0 });
-  }
-  function activeHosts(state) { return state.filter(h => h.vms.length > 0).length; }
-  function totalVMs(state) { return state.reduce((a, h) => a + h.vms.length, 0); }
-  function canFit(host, vm) {
-    const u = hostUsage(host);
-    return u.cpu + vm.cpu <= HOST_CPU && u.ram + vm.ram <= HOST_RAM;
+  // HOST_CPU, HOST_RAM, INSTANCE_TYPES come from constants.js (loaded above).
+  function typeHue(name) {
+    let h = 0;
+    for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+    return h % 360;
   }
 
-  function generateCluster() {
-    const hosts = [];
-    for (let i = 0; i < HOSTS; i++) hosts.push({ id: i, vms: [] });
-    let vmId = 0, attempts = 0;
-    const targetCpu = HOSTS * HOST_CPU * 0.6;
-    let placedCpu = 0;
-    while (placedCpu < targetCpu && attempts < 2000) {
-      attempts++;
-      const flavor = FLAVORS[rand(FLAVORS.length)];
-      const h = hosts[rand(HOSTS)];
-      const used = hostUsage(h);
-      if (used.cpu + flavor.cpu <= HOST_CPU && used.ram + flavor.ram <= HOST_RAM) {
-        h.vms.push({ id: vmId++, cpu: flavor.cpu, ram: flavor.ram, flavor: flavor.name });
-        placedCpu += flavor.cpu;
+  function clampInt(raw, lo, hi) {
+    const n = Math.floor(Number(raw));
+    if (!Number.isFinite(n)) return lo;
+    return Math.max(lo, Math.min(hi, n));
+  }
+
+  // Seeded RNG
+  function mulberry32(a) {
+    return function () {
+      let t = a += 0x6D2B79F5;
+      t = Math.imul(t ^ t >>> 15, t | 1);
+      t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  function randInt(rng, lo, hi) { return Math.floor(rng() * (hi - lo + 1)) + lo; }
+
+  function generateCluster(seed, hostCount, serverCount, targetPct, types) {
+    const rng = mulberry32(seed);
+    const pool = (types && types.length) ? types : INSTANCE_TYPES;
+    const hosts = Array.from({ length: hostCount }, (_, i) => ({
+      id: 'h' + i, idx: i, capCPU: HOST_CPU, capRAM: HOST_RAM,
+    }));
+    const makeServer = (i, t) => ({
+      id: 's' + i,
+      type: t.name,
+      label: t.name + '-' + String(i).padStart(2, '0'),
+      cpu: t.cpu,
+      ram: t.cpu * 2,
+      hue: typeHue(t.name),
+    });
+    const servers = [];
+    if (targetPct != null) {
+      // Auto mode: keep drawing types until demand reaches targetPct% of total cluster CPU.
+      const targetCpu = (targetPct / 100) * hostCount * HOST_CPU;
+      const maxServers = hostCount * HOST_CPU * 2;
+      let acc = 0;
+      while (acc < targetCpu && servers.length < maxServers) {
+        const t = pool[Math.floor(rng() * pool.length)];
+        servers.push(makeServer(servers.length, t));
+        acc += t.cpu;
+      }
+    } else {
+      for (let i = 0; i < serverCount; i++) {
+        const t = pool[Math.floor(rng() * pool.length)];
+        servers.push(makeServer(i, t));
       }
     }
-    return hosts;
+    const placement = {};
+    const load = hosts.map(() => ({ cpu: 0, ram: 0 }));
+    const order = [...servers].sort(() => rng() - 0.5);
+    const targets = hosts.map(() => randInt(rng, 25, 85));
+    for (const s of order) {
+      const cands = hosts
+        .map((h, i) => ({ h, i }))
+        .filter(c => c.h.capCPU - load[c.i].cpu >= s.cpu && c.h.capRAM - load[c.i].ram >= s.ram);
+      if (cands.length === 0) continue;
+      const under = cands.filter(c => load[c.i].cpu < targets[c.i]);
+      const pool = under.length > 0 ? under : cands;
+      pool.sort((a, b) => (load[b.i].cpu + load[b.i].ram) - (load[a.i].cpu + load[a.i].ram));
+      const pickIdx = rng() < 0.7 ? 0 : Math.min(pool.length - 1, Math.floor(rng() * Math.min(3, pool.length)));
+      const pick = pool[pickIdx];
+      placement[s.id] = pick.h.id;
+      load[pick.i].cpu += s.cpu;
+      load[pick.i].ram += s.ram;
+    }
+    const placedServers = servers.filter(s => placement[s.id]);
+    return { hosts, servers: placedServers, placement, seed, requested: servers.length };
   }
 
-  function runBalCon(state) {
-    const s = deepCloneState(state);
-    let migrations = 0;
+  function computeHostLoads(state) {
+    const loads = {};
+    for (const h of state.hosts) loads[h.id] = { cpu: 0, ram: 0, servers: [] };
+    for (const s of state.servers) {
+      const hid = state.placement[s.id];
+      if (!hid) continue;
+      loads[hid].cpu += s.cpu;
+      loads[hid].ram += s.ram;
+      loads[hid].servers.push(s);
+    }
+    return loads;
+  }
+  function activeHostCount(state) {
+    const loads = computeHostLoads(state);
+    return state.hosts.filter(h => loads[h.id].servers.length > 0).length;
+  }
+  function activeHostCountFromPlacement(state, placement) {
+    const counts = {};
+    for (const h of state.hosts) counts[h.id] = 0;
+    for (const s of state.servers) {
+      const hid = placement[s.id];
+      if (hid) counts[hid]++;
+    }
+    return state.hosts.filter(h => counts[h.id] > 0).length;
+  }
+
+  // BalCon: least-loaded non-empty donor, BFD evacuation onto remaining hosts (best-fit by slack).
+  // Candidates must already host at least one server — relocating onto an empty host is anti-consolidation.
+  function runBalCon(initial) {
+    const state = { ...initial, placement: { ...initial.placement } };
+    const migrations = [];
+    let step = 0;
     let progress = true;
     while (progress) {
       progress = false;
-      const active = s.filter(h => h.vms.length > 0);
-      if (active.length <= 1) break;
-      active.sort((a, b) => hostUsage(a).cpu - hostUsage(b).cpu);
-      const src = active[0];
-      const vmsSorted = [...src.vms].sort((a, b) => (b.cpu + b.ram) - (a.cpu + a.ram));
-      const plan = [];
-      const tempState = deepCloneState(s);
-      const tempSrc = tempState.find(h => h.id === src.id);
-      tempSrc.vms = [];
-      let allPlaced = true;
-      for (const vm of vmsSorted) {
-        const candidates = tempState.filter(h => h.id !== src.id && canFit(h, vm));
-        if (candidates.length === 0) {
-          let forced = false;
-          for (const h of tempState) {
-            if (h.id === src.id) continue;
-            const u = hostUsage(h);
-            const cpuDef = (u.cpu + vm.cpu) - HOST_CPU;
-            const ramDef = (u.ram + vm.ram) - HOST_RAM;
-            if (cpuDef > HOST_CPU || ramDef > HOST_RAM) continue;
-            const evictable = h.vms.find(ev =>
-              ev.cpu >= Math.max(0, cpuDef) && ev.ram >= Math.max(0, ramDef) &&
-              (ev.cpu + ev.ram) < (vm.cpu + vm.ram)
-            );
-            if (!evictable) continue;
-            const evictTarget = tempState.find(t =>
-              t.id !== h.id && t.id !== src.id && canFit(t, evictable)
-            );
-            if (!evictTarget) continue;
-            h.vms = h.vms.filter(x => x.id !== evictable.id);
-            evictTarget.vms.push(evictable);
-            h.vms.push(vm);
-            plan.push({ vm: vm.id, to: h.id });
-            plan.push({ vm: evictable.id, to: evictTarget.id });
-            forced = true;
-            break;
-          }
-          if (!forced) { allPlaced = false; break; }
-          continue;
+      const loads = computeHostLoads(state);
+      const nonEmpty = state.hosts
+        .filter(h => loads[h.id].servers.length > 0)
+        .sort((a, b) => (loads[a.id].cpu + loads[a.id].ram) - (loads[b.id].cpu + loads[b.id].ram));
+      for (const donor of nonEmpty) {
+        const donorServers = loads[donor.id].servers.slice()
+          .sort((a, b) => (b.cpu + b.ram) - (a.cpu + a.ram));
+        const trial = { ...state.placement };
+        const trialLoads = {};
+        for (const h of state.hosts) trialLoads[h.id] = { cpu: loads[h.id].cpu, ram: loads[h.id].ram };
+        trialLoads[donor.id] = { cpu: 0, ram: 0 };
+        let failed = false;
+        for (const s of donorServers) {
+          const cands = state.hosts.filter(h => h.id !== donor.id && loads[h.id].servers.length > 0)
+            .map(h => ({
+              h,
+              slack: Math.min(h.capCPU - trialLoads[h.id].cpu - s.cpu, h.capRAM - trialLoads[h.id].ram - s.ram),
+            }))
+            .filter(c => c.slack >= 0)
+            .sort((a, b) => a.slack - b.slack);
+          if (cands.length === 0) { failed = true; break; }
+          const target = cands[0].h;
+          trial[s.id] = target.id;
+          trialLoads[target.id].cpu += s.cpu;
+          trialLoads[target.id].ram += s.ram;
         }
-        candidates.sort((a, b) => {
-          const ua = hostUsage(a), ub = hostUsage(b);
-          return ((HOST_CPU - ua.cpu - vm.cpu) + (HOST_RAM - ua.ram - vm.ram)) -
-                 ((HOST_CPU - ub.cpu - vm.cpu) + (HOST_RAM - ub.ram - vm.ram));
-        });
-        candidates[0].vms.push(vm);
-        plan.push({ vm: vm.id, to: candidates[0].id });
-      }
-      if (allPlaced) {
-        for (let i = 0; i < s.length; i++) s[i].vms = tempState[i].vms;
-        migrations += plan.length;
+        if (failed) continue;
+        for (const s of donorServers) {
+          migrations.push({ serverId: s.id, from: donor.id, to: trial[s.id], step: step++ });
+          state.placement[s.id] = trial[s.id];
+        }
         progress = true;
+        break;
       }
     }
-    return { state: s, migrations };
+    return { finalPlacement: state.placement, migrations };
   }
 
-  function runPheCon(state) {
-    const s = deepCloneState(state);
-    let migrations = 0;
-    let progress = true;
-    let safety = 0;
-    while (progress && safety < 200) {
-      safety++;
-      progress = false;
-      const active = s.filter(h => h.vms.length > 0);
-      if (active.length <= 1) break;
-      active.sort((a, b) => {
-        const ua = hostUsage(a), ub = hostUsage(b);
-        return (ua.cpu + ua.ram) - (ub.cpu + ub.ram);
-      });
-      for (const src of active.slice(0, 3)) {
-        const vmsSorted = [...src.vms].sort((a, b) => (a.cpu + a.ram) - (b.cpu + b.ram));
-        for (const vm of vmsSorted) {
-          const candidates = s.filter(h => h.id !== src.id && canFit(h, vm));
-          if (candidates.length > 0) {
-            candidates.sort((a, b) => {
-              const ua = hostUsage(a), ub = hostUsage(b);
-              const lA = (HOST_CPU - ua.cpu - vm.cpu) + (HOST_RAM - ua.ram - vm.ram);
-              const lB = (HOST_CPU - ub.cpu - vm.cpu) + (HOST_RAM - ub.ram - vm.ram);
-              return lA - lB;
-            });
-            src.vms = src.vms.filter(x => x.id !== vm.id);
-            candidates[0].vms.push(vm);
-            migrations++;
-            progress = true;
-            break;
-          } else {
-            let swapped = false;
-            for (const h of s) {
-              if (h.id === src.id) continue;
-              const u = hostUsage(h);
-              const cpuDef = Math.max(0, u.cpu + vm.cpu - HOST_CPU);
-              const ramDef = Math.max(0, u.ram + vm.ram - HOST_RAM);
-              if (cpuDef === 0 && ramDef === 0) continue;
-              const cand = h.vms
-                .filter(ev => ev.cpu >= cpuDef && ev.ram >= ramDef && (ev.cpu + ev.ram) < (vm.cpu + vm.ram))
-                .sort((a, b) => (a.cpu + a.ram) - (b.cpu + b.ram))[0];
-              if (!cand) continue;
-              const target = s.find(t => t.id !== h.id && t.id !== src.id && canFit(t, cand));
-              if (!target) continue;
-              h.vms = h.vms.filter(x => x.id !== cand.id);
-              target.vms.push(cand);
-              src.vms = src.vms.filter(x => x.id !== vm.id);
-              h.vms.push(vm);
-              migrations += 2;
-              progress = true;
-              swapped = true;
-              break;
+  // PheCon: 16 multi-start iterations with pheromone-jittered donor priority + multi-ordering trials. Keep best.
+  function runPheCon(initial) {
+    const ITERS = 16;
+    let best = null;
+    for (let iter = 0; iter < ITERS; iter++) {
+      const rng = mulberry32(initial.seed * 1000 + iter + 17);
+      const state = { ...initial, placement: { ...initial.placement } };
+      const localMigrations = [];
+      let step = 0;
+      let progress = true;
+      while (progress) {
+        progress = false;
+        const loads = computeHostLoads(state);
+        const nonEmpty = state.hosts
+          .filter(h => loads[h.id].servers.length > 0)
+          .map(h => ({ h, score: (loads[h.id].cpu + loads[h.id].ram) + rng() * 80 * (1 - iter / ITERS) }))
+          .sort((a, b) => a.score - b.score)
+          .map(x => x.h);
+        for (const donor of nonEmpty) {
+          const sList = loads[donor.id].servers.slice();
+          const variants = [
+            [...sList].sort((a, b) => (b.cpu + b.ram) - (a.cpu + a.ram)),
+            [...sList].sort((a, b) => (a.cpu + a.ram) - (b.cpu + b.ram)),
+            [...sList].sort(() => rng() - 0.5),
+          ];
+          let success = null;
+          for (const order of variants) {
+            const trial = { ...state.placement };
+            const trialLoads = {};
+            for (const h of state.hosts) trialLoads[h.id] = { cpu: loads[h.id].cpu, ram: loads[h.id].ram };
+            trialLoads[donor.id] = { cpu: 0, ram: 0 };
+            let failed = false;
+            for (const s of order) {
+              const cands = state.hosts.filter(h => h.id !== donor.id && loads[h.id].servers.length > 0)
+                .map(h => ({
+                  h,
+                  slack: Math.min(h.capCPU - trialLoads[h.id].cpu - s.cpu, h.capRAM - trialLoads[h.id].ram - s.ram),
+                }))
+                .filter(c => c.slack >= 0);
+              if (cands.length === 0) { failed = true; break; }
+              cands.sort((a, b) => a.slack - b.slack);
+              const pickIdx = rng() < 0.75 ? 0 : Math.min(cands.length - 1, Math.floor(rng() * Math.min(3, cands.length)));
+              const target = cands[pickIdx].h;
+              trial[s.id] = target.id;
+              trialLoads[target.id].cpu += s.cpu;
+              trialLoads[target.id].ram += s.ram;
             }
-            if (swapped) break;
+            if (!failed) { success = { trial, order }; break; }
           }
+          if (!success) continue;
+          for (const s of success.order) {
+            localMigrations.push({ serverId: s.id, from: donor.id, to: success.trial[s.id], step: step++ });
+            state.placement[s.id] = success.trial[s.id];
+          }
+          progress = true;
+          break;
         }
-        if (progress) break;
+      }
+      const freed = state.hosts.length - activeHostCount(state);
+      const score = freed * 1000 - localMigrations.length;
+      if (!best || score > best.score) {
+        best = { finalPlacement: state.placement, migrations: localMigrations, score };
       }
     }
-    return { state: s, migrations };
+    return { finalPlacement: best.finalPlacement, migrations: best.migrations };
   }
 
-  function renderStats(extra) {
-    if (!currentState) { statsEl.innerHTML = ''; return; }
-    const active = activeHosts(currentState);
-    const empty = HOSTS - active;
-    const vms = totalVMs(currentState);
-    const totalCpu = currentState.reduce((a, h) => a + hostUsage(h).cpu, 0);
-    const totalRam = currentState.reduce((a, h) => a + hostUsage(h).ram, 0);
-    const avgFreeCpu = Math.round((HOST_CPU - totalCpu / Math.max(active, 1)) * 10) / 10;
-    const cards = [
-      { label: 'Active hosts', value: active + ' / ' + HOSTS },
-      { label: 'Empty hosts', value: empty },
-      { label: 'Total VMs', value: vms },
-      { label: 'Avg free CPU/host', value: avgFreeCpu },
-    ];
-    if (extra && extra.migrations !== undefined) {
-      cards.push({ label: 'Migrations used', value: extra.migrations });
+  // Custom: pick the active host with the most free CPU (lightest donor) and try
+  // to fully evacuate it. Each of its servers goes onto the active host with the
+  // least free CPU that still fits (best-fit). Only commit if every server can be
+  // relocated — a partial move wouldn't free the host. If it can't be emptied,
+  // skip it and move on to the next-most-free host.
+  function runCustom(initial) {
+    const state = { ...initial, placement: { ...initial.placement } };
+    const migrations = [];
+    let step = 0;
+    const skip = new Set();
+    while (true) {
+      const loads = computeHostLoads(state);
+      const active = state.hosts.filter(h => loads[h.id].servers.length > 0 && !skip.has(h.id));
+      if (active.length <= 1) break;
+      active.sort((a, b) => (b.capCPU - loads[b.id].cpu) - (a.capCPU - loads[a.id].cpu));
+      const donor = active[0];
+
+      const trialLoads = {};
+      for (const h of state.hosts) trialLoads[h.id] = { cpu: loads[h.id].cpu, ram: loads[h.id].ram };
+      const moves = [];
+      let placedAll = true;
+      for (const s of loads[donor.id].servers) {
+        const cands = state.hosts
+          .filter(h => h.id !== donor.id && loads[h.id].servers.length > 0)
+          .map(h => ({ h, freeCPU: h.capCPU - trialLoads[h.id].cpu, freeRAM: h.capRAM - trialLoads[h.id].ram }))
+          .filter(c => c.freeCPU >= s.cpu && c.freeRAM >= s.ram)
+          .sort((a, b) => a.freeCPU - b.freeCPU);
+        if (cands.length === 0) { placedAll = false; break; }
+        const target = cands[0].h;
+        trialLoads[target.id].cpu += s.cpu;
+        trialLoads[target.id].ram += s.ram;
+        moves.push({ serverId: s.id, from: donor.id, to: target.id });
+      }
+
+      if (placedAll && moves.length > 0) {
+        for (const m of moves) {
+          migrations.push({ serverId: m.serverId, from: m.from, to: m.to, step: step++ });
+          state.placement[m.serverId] = m.to;
+        }
+      } else {
+        skip.add(donor.id);
+      }
     }
-    statsEl.innerHTML = cards.map(c =>
-      '<div class="stat-card"><div class="stat-label">' + c.label +
-      '</div><div class="stat-value">' + c.value + '</div></div>'
-    ).join('');
+    return { finalPlacement: state.placement, migrations };
+  }
+
+  // ───────── State ─────────
+  let baseline = null;
+  let current  = null;
+  let activeAlgo = null;
+  let running = false;
+  let animMig = null;
+  let logs = [];
+  let results = { bal: null, phe: null, cus: null };
+  let animToken = 0;
+  let genMode = 'count';
+  let playMode = 'auto';   // 'auto' = animate all migrations · 'step' = one per click
+  let stepPlan = null;     // active step-through: { which, tag, algoName, migs, idx }
+  let selectedTypes = new Set(INSTANCE_TYPES.map(t => t.name));  // instance types used when generating
+
+  // ───────── DOM refs ─────────
+  const btnGen   = document.getElementById('btn-generate');
+  const btnBal   = document.getElementById('btn-balcon');
+  const btnPhe   = document.getElementById('btn-phecon');
+  const btnCus   = document.getElementById('btn-custom');
+  const btnRst   = document.getElementById('btn-reset');
+  const btnNext  = document.getElementById('btn-next');
+  const seedEl   = document.getElementById('seed-pill');
+  const statsEl  = document.getElementById('stats');
+  const clusterEl = document.getElementById('cluster');
+  const logEl    = document.getElementById('log');
+  const logMetaEl = document.getElementById('log-meta');
+  const gridMetaEl = document.getElementById('grid-meta');
+
+  function tStamp() {
+    const d = new Date();
+    return String(d.getMinutes()).padStart(2, '0') + ':' + String(d.getSeconds()).padStart(2, '0');
+  }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  }
+  function pushLog(entry) {
+    logs.push(entry);
+    if (logs.length > 200) logs = logs.slice(-200);
+    renderLog();
+  }
+  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+  function setButtons() {
+    const stepping = stepPlan !== null;
+    const busy = running || stepping;
+    btnGen.disabled = busy || selectedTypes.size === 0;
+    btnBal.disabled = busy || !baseline;
+    btnPhe.disabled = busy || !baseline;
+    btnCus.disabled = busy || !baseline;
+    btnRst.disabled = running || !baseline;       // reset also cancels a step-through
+    btnNext.disabled = !stepping;
+    btnNext.textContent = stepping
+      ? 'Next step ▶ (' + stepPlan.idx + '/' + stepPlan.migs.length + ')'
+      : 'Next step ▶';
+    btnBal.classList.toggle('active', activeAlgo === 'bal');
+    btnPhe.classList.toggle('active', activeAlgo === 'phe');
+    btnCus.classList.toggle('active', activeAlgo === 'cus');
+  }
+
+  function renderSeed() {
+    if (!baseline) {
+      seedEl.innerHTML = 'seed · <b>—</b><br/><span class="sub">0 servers</span>';
+      return;
+    }
+    seedEl.innerHTML =
+      'seed · <b>' + String(baseline.seed).padStart(5, '0') + '</b><br/>' +
+      '<span class="sub">' + current.servers.length + ' servers</span>';
+  }
+
+  function renderStats() {
+    if (!current) { statsEl.innerHTML = ''; return; }
+    const loads = computeHostLoads(current);
+    const baseLoads = computeHostLoads(baseline);
+    const hostCount = current.hosts.length;
+    const activeNow = current.hosts.filter(h => loads[h.id].servers.length > 0).length;
+    const freedNow = hostCount - activeNow;
+    const freedBase = hostCount - baseline.hosts.filter(h => baseLoads[h.id].servers.length > 0).length;
+    const freedNet = freedNow - freedBase;
+    const balResult = results.bal;
+    const pheResult = results.phe;
+    const cusResult = results.cus;
+    const balFreed = balResult ? (hostCount - activeHostCountFromPlacement(baseline, balResult.finalPlacement)) - freedBase : null;
+    const pheFreed = pheResult ? (hostCount - activeHostCountFromPlacement(baseline, pheResult.finalPlacement)) - freedBase : null;
+    const cusFreed = cusResult ? (hostCount - activeHostCountFromPlacement(baseline, cusResult.finalPlacement)) - freedBase : null;
+
+    const advColor = (balFreed !== null && pheFreed !== null)
+      ? (pheFreed > balFreed ? 'var(--phecon)' : balFreed > pheFreed ? 'var(--balcon)' : 'var(--ink)')
+      : 'var(--ink-3)';
+    const advText = (balFreed !== null && pheFreed !== null)
+      ? (pheFreed === balFreed ? 'tied' : (pheFreed > balFreed ? '+' + (pheFreed - balFreed) + ' PheCon' : '+' + (balFreed - pheFreed) + ' BalCon'))
+      : '—';
+    const migDelta = (balResult && pheResult)
+      ? 'mig Δ: ' + (pheResult.migrations.length - balResult.migrations.length > 0 ? '+' : '') + (pheResult.migrations.length - balResult.migrations.length)
+      : 'run both to compare';
+
+    statsEl.innerHTML = `
+      <div class="stat">
+        <div class="label">Active hosts</div>
+        <div class="value">${activeNow}<span class="unit">/ ${hostCount}</span></div>
+        <div class="delta">baseline: ${hostCount - freedBase}/${hostCount}</div>
+      </div>
+      <div class="stat">
+        <div class="label">Freed hosts</div>
+        <div class="value" style="color:${freedNet > 0 ? 'var(--ok)' : 'var(--ink)'}">${freedNet}</div>
+        <div class="delta ${freedNet > 0 ? 'up' : ''}">${freedBase} idle at baseline</div>
+      </div>
+      <div class="stat bal">
+        <div class="label">BalCon result</div>
+        <div class="value">${balFreed !== null ? balFreed : '—'}<span class="unit">freed</span></div>
+        <div class="delta">${balResult ? balResult.migrations.length + ' migrations' : 'not run yet'}</div>
+      </div>
+      <div class="stat phe">
+        <div class="label">PheCon result</div>
+        <div class="value">${pheFreed !== null ? pheFreed : '—'}<span class="unit">freed</span></div>
+        <div class="delta">${pheResult ? pheResult.migrations.length + ' migrations' : 'not run yet'}</div>
+      </div>
+      <div class="stat cus">
+        <div class="label">Custom result</div>
+        <div class="value">${cusFreed !== null ? cusFreed : '—'}<span class="unit">freed</span></div>
+        <div class="delta">${cusResult ? cusResult.migrations.length + ' migrations' : 'not run yet'}</div>
+      </div>
+      <div class="stat">
+        <div class="label">Δ Advantage</div>
+        <div class="value" style="color:${advColor}">${advText}</div>
+        <div class="delta">${migDelta}</div>
+      </div>
+    `;
   }
 
   function renderCluster() {
-    if (!currentState) { clusterEl.innerHTML = ''; return; }
-    clusterEl.innerHTML = currentState.map(h => {
-      const u = hostUsage(h);
-      const cpuPct = Math.round((u.cpu / HOST_CPU) * 100);
-      const ramPct = Math.round((u.ram / HOST_RAM) * 100);
-      const empty = h.vms.length === 0;
+    if (!current) { clusterEl.innerHTML = ''; return; }
+    const loads = computeHostLoads(current);
+    clusterEl.style.gridTemplateColumns = 'repeat(' + Math.min(current.hosts.length, 5) + ', 1fr)';
+    clusterEl.innerHTML = current.hosts.map(h => {
+      const load = loads[h.id];
+      const isEmpty = load.servers.length === 0;
+      const isOverflow = load.cpu > h.capCPU || load.ram > h.capRAM;
+      const hasGhosts = activeAlgo && current.servers.some(s =>
+        baseline.placement[s.id] === h.id && current.placement[s.id] !== h.id
+      );
+      const cls = 'host' + (isEmpty ? ' empty' : '') + (isOverflow ? ' overflow' : '') + (hasGhosts ? ' has-ghosts' : '');
+      const cpuPct = Math.min(100, (load.cpu / h.capCPU) * 100);
+      const ramPct = Math.min(100, (load.ram / h.capRAM) * 100);
+      const cpuFill = cpuPct > 95 ? 'hot' : cpuPct > 80 ? 'warm' : '';
+      const ramFill = ramPct > 95 ? 'hot' : ramPct > 80 ? 'warm' : '';
+      const serversHtml = load.servers.map(s => {
+        const migOut = animMig && animMig.serverId === s.id && animMig.phase === 'out' && animMig.from === h.id;
+        const migIn  = animMig && animMig.serverId === s.id && animMig.phase === 'in'  && animMig.to   === h.id;
+        const algoCls = migIn ? (activeAlgo === 'bal' ? ' bal-mig' : activeAlgo === 'phe' ? ' phe-mig' : ' cus-mig') : '';
+        const stateCls = (migOut ? ' migrating-out' : '') + (migIn ? ' migrating-in' : '') + algoCls;
+        return (
+          '<div class="server' + stateCls + '" data-server-id="' + s.id + '">' +
+            '<div class="name">' +
+              '<span class="swatch" style="background: oklch(0.65 0.12 ' + s.hue + ')"></span>' +
+              '<span>' + s.label + '</span>' +
+            '</div>' +
+            '<span class="demand">' + s.cpu + 'c · ' + s.ram + 'g</span>' +
+          '</div>'
+        );
+      }).join('');
+      const ghostHtml = hasGhosts ? current.servers.filter(s =>
+        baseline.placement[s.id] === h.id && current.placement[s.id] !== h.id
+      ).map(s => {
+        const ghostActive = animMig && animMig.serverId === s.id;
+        const gAlgo = ghostActive ? (activeAlgo === 'bal' ? ' bal-mig' : activeAlgo === 'phe' ? ' phe-mig' : ' cus-mig') : '';
+        return (
+          '<div class="server ghost' + (ghostActive ? ' ghost-active' : '') + gAlgo + '" data-server-id="' + s.id + '">' +
+            '<div class="name">' +
+              '<span class="swatch" style="background: oklch(0.65 0.12 ' + s.hue + ')"></span>' +
+              '<span>' + s.label + '</span>' +
+            '</div>' +
+            '<span class="demand">' + s.cpu + 'c · ' + s.ram + 'g</span>' +
+          '</div>'
+        );
+      }).join('') : '';
       return (
-        '<div class="host' + (empty ? ' empty' : '') + '">' +
-          '<div class="host-head"><span>host ' + h.id + '</span>' +
-            '<span>' + h.vms.length + ' vm' + (h.vms.length === 1 ? '' : 's') + '</span></div>' +
-          '<div class="meter-row"><span>cpu</span><span>' + u.cpu + '/' + HOST_CPU + '</span></div>' +
-          '<div class="meter"><div style="width:' + cpuPct + '%; background: var(--info-bg);"></div></div>' +
-          '<div class="meter-row"><span>ram</span><span>' + u.ram + '/' + HOST_RAM + '</span></div>' +
-          '<div class="meter"><div style="width:' + ramPct + '%; background: var(--success-bg);"></div></div>' +
+        '<div class="' + cls + '" data-host-id="' + h.id + '">' +
+          '<div class="host-head">' +
+            '<div class="host-name"><span class="idx">' + String(h.idx + 1).padStart(2, '0') + '</span>host-' + h.id.slice(1) + '</div>' +
+            '<div class="host-status ' + (isEmpty ? 'off' : 'on') + '"><span class="led"></span>' + (isEmpty ? 'idle' : 'active') + '</div>' +
+          '</div>' +
+          '<div class="meters">' +
+            '<div class="meter"><div class="head"><span class="lbl">CPU</span><span class="val">' + Math.round(load.cpu) + '/' + h.capCPU + '</span></div>' +
+              '<div class="bar"><div class="fill ' + cpuFill + '" style="width:' + cpuPct + '%"></div></div></div>' +
+            '<div class="meter"><div class="head"><span class="lbl">RAM</span><span class="val">' + Math.round(load.ram) + '/' + h.capRAM + '</span></div>' +
+              '<div class="bar"><div class="fill ' + ramFill + '" style="width:' + ramPct + '%"></div></div></div>' +
+          '</div>' +
+          '<div class="servers">' + serversHtml + ghostHtml + '</div>' +
+          (isEmpty && !hasGhosts ? '<div class="empty-tag"><span class="big">◆ freed</span><span>power-savings ready</span></div>' : '') +
         '</div>'
       );
     }).join('');
+
+    if (activeAlgo === 'bal') gridMetaEl.textContent = '⟵ BalCon plan in progress';
+    else if (activeAlgo === 'phe') gridMetaEl.textContent = '⟵ PheCon plan in progress';
+    else if (activeAlgo === 'cus') gridMetaEl.textContent = '⟵ Custom plan in progress';
+    else gridMetaEl.textContent = 'baseline state — pick an algorithm above';
   }
 
-  function setStatus(text) { statusEl.textContent = text; }
+  function renderLog() {
+    if (logs.length === 0) {
+      logEl.innerHTML = '<div class="empty">No events yet.</div>';
+    } else {
+      logEl.innerHTML = logs.map(l =>
+        '<div class="entry ' + l.cls + '">' +
+          '<span class="t">' + escapeHtml(l.t) + '</span>' +
+          '<span class="tag">' + escapeHtml(l.tag) + '</span>' +
+          '<span class="msg">' + escapeHtml(l.msg) + '</span>' +
+        '</div>'
+      ).join('');
+    }
+    logMetaEl.textContent = logs.length + ' events · scrollable';
+    logEl.scrollTop = logEl.scrollHeight;
+  }
 
-  btnGen.addEventListener('click', () => {
-    initialState = generateCluster();
-    currentState = deepCloneState(initialState);
-    btnBal.disabled = false;
-    btnPhe.disabled = false;
-    btnRst.disabled = false;
-    setStatus('Generated cluster with ' + totalVMs(currentState) +
-      ' VMs across ' + activeHosts(currentState) + ' active hosts. Now try an algorithm.');
+  function renderAll() {
+    renderSeed();
     renderStats();
     renderCluster();
-  });
+    renderLog();
+    setButtons();
+  }
 
-  btnBal.addEventListener('click', () => {
-    if (!initialState) return;
-    currentState = deepCloneState(initialState);
-    const result = runBalCon(currentState);
-    currentState = result.state;
-    setStatus('BalCon: consolidated to ' + activeHosts(currentState) +
-      ' active hosts using ' + result.migrations + ' migrations.');
-    renderStats({ migrations: result.migrations });
+  function genCluster(seed, hostCount, serverCount, targetPct) {
+    const types = INSTANCE_TYPES.filter(t => selectedTypes.has(t.name));
+    const c = generateCluster(seed, hostCount, serverCount, targetPct, types);
+    baseline = c;
+    current = { ...c, placement: { ...c.placement } };
+    activeAlgo = null;
+    results = { bal: null, phe: null, cus: null };
+    animMig = null;
+    const placedCpu = c.servers.reduce((a, s) => a + s.cpu, 0);
+    const loadPct = Math.round((placedCpu / (c.hosts.length * HOST_CPU)) * 100);
+    logs = [{ tag: 'SYS', cls: 'sys', t: '00:00', msg: 'Generated cluster · seed=' + seed + ' · ' + c.servers.length + ' servers across ' + c.hosts.length + ' hosts · ~' + loadPct + '% load' }];
+    if (targetPct != null) {
+      logs.push({ tag: 'SYS', cls: 'sys', t: '00:00', msg: 'auto workload: target ' + targetPct + '% → placed ' + loadPct + '% of ' + c.hosts.length + '×' + HOST_CPU + 'c/' + HOST_RAM + 'g capacity' });
+    } else if (c.servers.length < c.requested) {
+      logs.push({ tag: 'SYS', cls: 'sys', t: '00:00', msg: 'requested ' + c.requested + ' servers, placed ' + c.servers.length + ' (capacity limit at ' + c.hosts.length + '×' + HOST_CPU + 'c/' + HOST_RAM + 'g)' });
+    }
+    renderAll();
+  }
+
+  function reset() {
+    animToken++;
+    running = false;
+    stepPlan = null;
+    activeAlgo = null;
+    animMig = null;
+    current = { ...baseline, placement: { ...baseline.placement } };
+    pushLog({ tag: 'SYS', cls: 'sys', t: tStamp(), msg: 'Reset to baseline cluster' });
+    renderAll();
+  }
+
+  async function animateMigrations(migs, algo, token) {
+    const stepDelay = 320;
+    for (let i = 0; i < migs.length; i++) {
+      if (token !== animToken) return;
+      const m = migs[i];
+      const server = current.servers.find(s => s.id === m.serverId);
+      animMig = { ...m, phase: 'out' };
+      pushLog({
+        tag: algo.toUpperCase(),
+        cls: algo,
+        t: tStamp(),
+        msg: 'migrate ' + server.label + ' (' + server.cpu + 'c·' + server.ram + 'g)  ' + m.from + ' → ' + m.to,
+      });
+      renderCluster();
+      await sleep(stepDelay * 0.45);
+      if (token !== animToken) return;
+      current.placement = { ...current.placement, [m.serverId]: m.to };
+      animMig = { ...m, phase: 'in' };
+      renderCluster();
+      renderStats();
+      await sleep(stepDelay * 0.55);
+    }
+    animMig = null;
     renderCluster();
-  });
+  }
 
-  btnPhe.addEventListener('click', () => {
-    if (!initialState) return;
-    currentState = deepCloneState(initialState);
-    const result = runPheCon(currentState);
-    currentState = result.state;
-    setStatus('PheCon: consolidated to ' + activeHosts(currentState) +
-      ' active hosts using ' + result.migrations + ' migrations.');
-    renderStats({ migrations: result.migrations });
-    renderCluster();
-  });
+  async function runAlgo(which) {
+    if (running || stepPlan || !baseline) return;
+    animToken++;
+    const token = animToken;
+    running = true;
+    activeAlgo = which;
+    current = { ...baseline, placement: { ...baseline.placement } };
+    renderAll();
+    await sleep(60);
+    if (token !== animToken) { running = false; return; }
 
-  btnRst.addEventListener('click', () => {
-    if (!initialState) return;
-    currentState = deepCloneState(initialState);
-    setStatus('Reset to the original generated cluster (same VMs, same placement).');
+    const algoName = which === 'bal' ? 'BalCon' : which === 'phe' ? 'PheCon' : 'Custom';
+    const tag = which.toUpperCase();
+    const runner = which === 'bal' ? runBalCon : which === 'phe' ? runPheCon : runCustom;
+    pushLog({ tag, cls: which, t: tStamp(), msg: '▶ Running ' + algoName + '…' });
+    const result = runner(baseline);
+    results = { ...results, [which]: result };
+    const freedBaseline = baseline.hosts.length - activeHostCount(baseline);
+    const freedByAlgo = (baseline.hosts.length - activeHostCountFromPlacement(baseline, result.finalPlacement)) - freedBaseline;
+    pushLog({
+      tag,
+      cls: which,
+      t: tStamp(),
+      msg: 'plan: ' + result.migrations.length + ' migrations to free ' + freedByAlgo + ' hosts',
+    });
     renderStats();
+
+    if (playMode === 'step') {
+      running = false;
+      stepPlan = { which, tag, algoName, migs: result.migrations, idx: 0 };
+      pushLog({ tag, cls: which, t: tStamp(), msg: 'step mode — click “Next step” to apply each migration (' + result.migrations.length + ' total)' });
+      renderAll();
+      return;
+    }
+
+    await animateMigrations(result.migrations, which, token);
+    if (token !== animToken) { running = false; return; }
+    pushLog({ tag, cls: which, t: tStamp(), msg: '✓ ' + algoName + ' complete' });
+    running = false;
+    renderAll();
+  }
+
+  function advanceStep() {
+    if (!stepPlan) return;
+    const { which, tag, algoName, migs } = stepPlan;
+    const m = migs[stepPlan.idx];
+    const server = current.servers.find(s => s.id === m.serverId);
+    current.placement = { ...current.placement, [m.serverId]: m.to };
+    animMig = { ...m, phase: 'in' };
+    pushLog({
+      tag,
+      cls: which,
+      t: tStamp(),
+      msg: 'migrate ' + server.label + ' (' + server.cpu + 'c·' + server.ram + 'g)  ' + m.from + ' → ' + m.to,
+    });
+    stepPlan.idx++;
     renderCluster();
+    renderStats();
+    if (stepPlan.idx >= migs.length) {
+      stepPlan = null;   // keep animMig so the final migration stays highlighted
+      pushLog({ tag, cls: which, t: tStamp(), msg: '✓ ' + algoName + ' complete' });
+      renderAll();
+    } else {
+      setButtons();
+    }
+  }
+
+  function regenerate() {
+    animToken++;
+    running = false;
+    stepPlan = null;
+    const inH = document.getElementById('in-hosts');
+    const hostCount = clampInt(inH.value, 1, Infinity);
+    inH.value = hostCount;
+    const seed = Math.floor(Math.random() * 99999);
+    if (genMode === 'pct') {
+      const inP = document.getElementById('in-percent');
+      const pct = clampInt(inP.value, 1, 100);
+      inP.value = pct;
+      genCluster(seed, hostCount, null, pct);
+    } else {
+      const inS = document.getElementById('in-servers');
+      const serverCount = clampInt(inS.value, 0, Infinity);
+      inS.value = serverCount;
+      genCluster(seed, hostCount, serverCount);
+    }
+  }
+
+  btnGen.addEventListener('click', regenerate);
+  btnBal.addEventListener('click', () => runAlgo('bal'));
+  btnPhe.addEventListener('click', () => runAlgo('phe'));
+  btnCus.addEventListener('click', () => runAlgo('cus'));
+  btnNext.addEventListener('click', advanceStep);
+  btnRst.addEventListener('click', reset);
+
+  document.querySelectorAll('#play-toggle .seg').forEach(btn => {
+    btn.addEventListener('click', () => {
+      playMode = btn.dataset.play;
+      document.querySelectorAll('#play-toggle .seg').forEach(b => b.classList.toggle('active', b.dataset.play === playMode));
+    });
   });
+
+  const fieldCount = document.getElementById('field-count');
+  const fieldPct = document.getElementById('field-pct');
+  document.querySelectorAll('#mode-toggle .seg').forEach(btn => {
+    btn.addEventListener('click', () => {
+      genMode = btn.dataset.mode;
+      document.querySelectorAll('#mode-toggle .seg').forEach(b => b.classList.toggle('active', b.dataset.mode === genMode));
+      fieldCount.style.display = genMode === 'count' ? '' : 'none';
+      fieldPct.style.display = genMode === 'pct' ? '' : 'none';
+    });
+  });
+
+  const chipsEl = document.getElementById('type-chips');
+  const typesCountEl = document.getElementById('types-count');
+  function renderTypeChips() {
+    chipsEl.innerHTML = INSTANCE_TYPES.map(t => {
+      const on = selectedTypes.has(t.name);
+      return '<button type="button" class="chip' + (on ? ' on' : '') + '" data-type="' + escapeHtml(t.name) + '" style="--chip-c: oklch(0.65 0.12 ' + typeHue(t.name) + ')">' +
+        '<span class="swatch"></span>' + escapeHtml(t.name) + ' · ' + t.cpu + 'c' +
+      '</button>';
+    }).join('');
+    typesCountEl.textContent = selectedTypes.size === 0
+      ? 'select at least one to generate'
+      : selectedTypes.size + '/' + INSTANCE_TYPES.length + ' selected';
+  }
+  chipsEl.addEventListener('click', e => {
+    const chip = e.target.closest('.chip');
+    if (!chip) return;
+    const name = chip.dataset.type;
+    if (selectedTypes.has(name)) selectedTypes.delete(name);
+    else selectedTypes.add(name);
+    renderTypeChips();
+    setButtons();
+  });
+  document.getElementById('types-all').addEventListener('click', () => {
+    selectedTypes = new Set(INSTANCE_TYPES.map(t => t.name));
+    renderTypeChips();
+    setButtons();
+  });
+  document.getElementById('types-none').addEventListener('click', () => {
+    selectedTypes.clear();
+    renderTypeChips();
+    setButtons();
+  });
+
+  // boot
+  renderTypeChips();
+  regenerate();
 })();
 </script>
 </body>
